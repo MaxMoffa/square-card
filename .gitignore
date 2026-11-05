@@ -1,0 +1,7 @@
+node_modules/
+dist/
+artifacts/
+.sites-local/
+.openai/
+*.tar.gz
+*.log
