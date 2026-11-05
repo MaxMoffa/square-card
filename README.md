@@ -10,6 +10,18 @@ La pagina iniziale mostra un biglietto largo il 100% e alto il 100% della finest
 
 Il logo aziendale si aggiorna dal campo **Sito web**: viene caricata la favicon all'indirizzo `/favicon.ico` del sito. Se non disponibile, viene usato il servizio favicon di Google, a cui è trasmesso soltanto l'indirizzo di origine del sito, senza nome, email o telefono. Se entrambe le immagini non sono disponibili, oppure il sito manca, appaiono le iniziali dell'azienda. Il caricamento della favicon richiede una connessione di rete.
 
+## Tessera per Apple Wallet e Google Wallet
+
+La pagina offre pulsanti **Apple Wallet** e **Google Wallet** con un percorso guidato. Dalla personalizzazione è possibile scegliere un colore libero, un titolo, il logo dalla favicon o un'immagine caricata e i campi stampati. Il colore del testo usa automaticamente un contrasto leggibile. Impostazioni e logo caricato sono conservati nel localStorage insieme al contatto.
+
+L'esportazione produce una tessera PNG di 1080 × 1440 pixel con QR vCard completo. Le opzioni di visibilità dei campi riguardano solo il testo stampato: il QR continua a contenere tutti i dati del contatto. I loghi esterni vengono inclusi soltanto se il sito consente il caricamento CORS; altrimenti si usano le iniziali e viene mostrato un avviso. Caricare un logo PNG, JPG o WebP permette di includerlo senza dipendere da siti esterni.
+
+La versione ospitata su GitHub Pages **non emette pass firmati e non aggiunge automaticamente la tessera al Wallet**. Il percorso attuale esporta un'immagine e mostra come importarla da Google Wallet, oppure da Apple Wallet su iOS 27 e dispositivi compatibili. L'app Wallet può riformattare grafica, campi, colori e logo. Disponibilità e riconoscimento del QR devono essere verificati sul dispositivo. La tessera non abilita il trasferimento NFC tra telefoni e non si aggiorna dopo l'importazione.
+
+Per l'aggiunta automatica servono un servizio di firma e credenziali emittente: Apple richiede un certificato Pass Type ID per firmare il `.pkpass`; Google richiede un account Wallet Issuer autorizzato e un JWT firmato dalla relativa service account. Non sono presenti chiavi nel repository e non vengono richieste al visitatore. I badge ufficiali “Add to Wallet” non vengono utilizzati per il percorso manuale.
+
+Fonti ufficiali: [Apple: creare pass nell'app Wallet](https://support.apple.com/guide/iphone/create-passes-el8l5r9jnhyv/27/ios/27), [Google: importazione da foto](https://support.google.com/wallet/answer/12060038?hl=it), [Apple: pass firmati](https://developer.apple.com/wallet/get-started/), [Google: JWT per Wallet](https://developers.google.com/wallet/generic/use-cases/jwt), [Google: colori e logo](https://developers.google.com/wallet/generic/resources/brand-guidelines).
+
 Il link **Personalizza biglietto** apre la pagina separata `#/personalizza`, con i dati e le tre varianti. **Apri biglietto** riporta alla presentazione `#/biglietto`. Entrambe le pagine funzionano anche nel file HTML autonomo e condividono gli stessi dati.
 
 - Il QR contiene direttamente una vCard 3.0 e viene generato nel browser.

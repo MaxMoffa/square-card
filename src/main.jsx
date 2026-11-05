@@ -6,6 +6,10 @@ import { contactFile, createVCard, defaultContact, downloadFile, websiteUrl } fr
 import './styles.css';
 import ContactPresentation from './ContactPresentation.jsx';
 import CompanyLogo from './CompanyLogo.jsx';
+import QR from './QR.jsx';
+import { WalletSettings, WalletDialog } from './Wallet.jsx';
+import { normalizeWalletSettings } from './wallet.js';
+import { createWalletImage } from './wallet-image.js';
 
 const themes = [
   { id: 'essential', name: 'Essential', description: 'Naturale. Essenziale. Tuo.', tag: 'Il più scelto', color: '#244b40' },
@@ -17,19 +21,8 @@ const currentPage = () => window.location.hash === '#/personalizza' ? 'personali
 function initialData() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return { contact: Object.fromEntries(Object.entries(defaultContact).map(([key, value]) => [key, typeof saved?.contact?.[key] === 'string' ? saved.contact[key].slice(0, 120) : value])), theme: themes.some(t => t.id === saved?.theme) ? saved.theme : 'essential' };
-  } catch { return { contact: defaultContact, theme: 'essential' }; }
-}
-function QR({ value, className = '', size = 220 }) {
-  const [src, setSrc] = useState('');
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    let active = true;
-    setSrc(''); setError(false);
-    QRCode.toDataURL(value, { width: size * 2, margin: 4, errorCorrectionLevel: 'M', color: { dark: '#183c32', light: '#ffffff' } }).then(url => { if (active) setSrc(url); }).catch(() => { if (active) setError(true); });
-    return () => { active = false; };
-  }, [value, size]);
-  return <div className={`qr ${className}`} aria-busy={!src && !error}>{src ? <img src={src} alt="QR Code del contatto in formato vCard" width={size} height={size} /> : <span>{error ? 'QR non disponibile: riduci i dati.' : <QrCode size={32} />}</span>}</div>;
+    return { contact: Object.fromEntries(Object.entries(defaultContact).map(([key, value]) => [key, typeof saved?.contact?.[key] === 'string' ? saved.contact[key].slice(0, 120) : value])), theme: themes.some(t => t.id === saved?.theme) ? saved.theme : 'essential', wallet: normalizeWalletSettings(saved?.wallet) };
+  } catch { return { contact: defaultContact, theme: 'essential', wallet: normalizeWalletSettings() }; }
 }
 function BusinessCard({ contact, theme, vcard, mini = false }) {
   return <div className={`business-card ${theme} ${mini ? 'mini' : ''}`}>
@@ -44,6 +37,8 @@ function App() {
   const [page, setPage] = useState(currentPage);
   const [contact, setContactState] = useState(initial.contact);
   const [theme, setThemeState] = useState(initial.theme);
+  const [wallet, setWalletState] = useState(initial.wallet);
+  const [walletBusy, setWalletBusy] = useState(false);
   const profileRef = useRef(initial);
   const [view, setView] = useState('card');
   const [modal, setModal] = useState(null);
@@ -92,6 +87,11 @@ function App() {
     persistProfile({ ...profileRef.current, theme: next });
     setThemeState(next);
   }
+  function setWallet(update) {
+    const next = normalizeWalletSettings(typeof update === 'function' ? update(profileRef.current.wallet) : update);
+    persistProfile({ ...profileRef.current, wallet: next });
+    setWalletState(next);
+  }
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 4500); return () => clearTimeout(t); }, [toast]);
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -113,6 +113,17 @@ function App() {
     if (!validate()) return;
     downloadFile(contactFile(contact));
     setToast('Contatto scaricato. Apri il file .vcf per salvarlo in rubrica.');
+  }
+  function openWallet(provider) { if (validate()) setModal(`wallet-${provider}`); }
+  async function downloadWallet() {
+    if (!validate() || walletBusy) return;
+    setWalletBusy(true);
+    try {
+      const result = await createWalletImage(contact, theme, wallet);
+      downloadFile(result.file);
+      setToast(result.logoFallback ? 'Tessera scaricata con iniziali. Per includere il logo carica un PNG nella personalizzazione Wallet.' : 'Tessera PNG scaricata. Segui le istruzioni per importarla nel Wallet.');
+    } catch { setToast('Esportazione non riuscita. Riprova o scarica solo il QR.'); }
+    finally { setWalletBusy(false); }
   }
   async function share() {
     if (!validate() || shareLock.current) return;
@@ -166,7 +177,7 @@ function App() {
   function openShare() { if (validate()) setModal('share'); }
 
   return <>
-    {page === 'biglietto' ? <ContactPresentation contact={contact} theme={theme} qr={<QR value={vcard} size={320} />} onSave={download} onShare={share} onNearby={() => setModal('nearby')} onQR={() => { if (validate()) setModal('qr'); }} /> : <div className="app-shell">
+    {page === 'biglietto' ? <ContactPresentation contact={contact} theme={theme} qr={<QR value={vcard} size={320} />} onSave={download} onShare={share} onNearby={() => setModal('nearby')} onWallet={openWallet} onQR={() => { if (validate()) setModal('qr'); }} /> : <div className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#/biglietto" aria-label="Square, il mio biglietto"><SquaresFour weight="fill" size={31} /><span>square<span className="brand-dot">.</span></span></a>
       <div className="workspace"><span className="workspace-icon">{`${contact.firstName.charAt(0)}${contact.lastName.charAt(0)}` || 'SC'}</span><div><strong>Il tuo spazio</strong><span>Personale</span></div><CaretDown size={14} /></div>
@@ -195,6 +206,7 @@ function App() {
             </div>
             <div className="style-heading"><div><h2>Tre modi di essere te.</h2><p>Scegli lo stile che ti somiglia.</p></div><span>0{themes.findIndex(t => t.id === theme) + 1} <span>/ 03</span></span></div>
             <div className="theme-options" aria-label="Scegli una variante">{themes.map((t, index) => <button key={t.id} className={`theme-option ${theme === t.id ? 'chosen' : ''}`} onClick={() => setTheme(t.id)} aria-pressed={theme === t.id} aria-label={`Scegli ${t.name}`}><div className={`theme-swatch ${t.id}`}><div className="swatch-top"><span>{contact.company || 'La tua azienda'}</span><WifiHigh size={13} /></div><div className="swatch-bottom"><span>{contact.firstName || 'Nome'}<br />{contact.lastName || 'Cognome'}<b>.</b></span><QrCode size={30} weight="regular" /></div></div><div className="theme-name"><strong>{t.name}</strong><span className="radio-circle">{theme === t.id && <Check size={10} weight="bold" />}</span></div><span className="theme-description">{t.description}</span></button>)}</div>
+            <WalletSettings contact={contact} theme={theme} settings={wallet} onChange={setWallet} onSelect={openWallet} />
             <div className="connection-note"><span className="connection-icon"><LinkSimple size={17} /></span><p>Non serve un'app per conoscersi.<span>Il tuo contatto si salva direttamente in rubrica.</span></p><ArrowRight size={18} /></div>
           </section>
           <section className="details-panel" aria-labelledby="details-title"><div className="details-heading"><span className="edit-icon"><PencilSimple size={19} /></span><div><h2 id="details-title">Fai le presentazioni.</h2><p>Il tuo prossimo contatto parte da qui.</p></div></div>
@@ -217,7 +229,8 @@ function App() {
       </main>
     </div>
     </div>}
-    <dialog ref={dialogRef} className={`modal ${modal === 'preview' ? 'preview-modal' : ''}`} onCancel={() => setModal(null)} onClick={e => { if (e.target === dialogRef.current) setModal(null); }}><button className="modal-close icon-button" onClick={() => setModal(null)} aria-label="Chiudi finestra"><X size={20} /></button>
+    <dialog ref={dialogRef} className={`modal ${modal === 'preview' ? 'preview-modal' : ''} ${modal?.startsWith('wallet-') ? 'wallet-modal' : ''}`} onCancel={() => setModal(null)} onClick={e => { if (e.target === dialogRef.current) setModal(null); }}><button className="modal-close icon-button" onClick={() => setModal(null)} aria-label="Chiudi finestra"><X size={20} /></button>
+      {modal?.startsWith('wallet-') && <WalletDialog provider={modal.slice(7)} contact={contact} theme={theme} settings={wallet} onDownload={downloadWallet} onQRDownload={saveQR} busy={walletBusy} />}
       {(modal === 'share' || modal === 'qr') && <><div className="modal-eyebrow"><ShareNetwork size={16} />FACCIAMO CONNESSIONE</div><h2>{modal === 'share' ? 'Il tuo prossimo incontro.' : 'Un gesto. Già in rubrica.'}</h2><p className="modal-description">Inquadra il QR per salvare il contatto.<br />Nessuna app, nessuna registrazione.</p><QR value={vcard} size={250} className="modal-qr" /><strong className="modal-person">{contact.firstName} {contact.lastName}</strong><span className="modal-role">{contact.title}{contact.title && ' · '}{contact.company}</span><button className="button primary full-width" onClick={modal === 'share' ? share : saveQR}>{modal === 'share' ? <ShareNetwork size={19} /> : <ArrowDownTray size={19} />}{modal === 'share' ? 'Invia il contatto' : 'Scarica QR Code'}</button><div className="modal-secondary-actions"><button onClick={download}><ArrowDownTray size={17} />Scarica .vcf</button><button onClick={copy}><Copy size={17} />Copia dati</button></div><p className="small-print">Nome, cognome, azienda, email e telefono.<br />Un contatto completo, pronto da salvare.</p></>}
       {modal === 'preview' && <><div className="modal-eyebrow"><CreditCard size={16} />IL TUO BIGLIETTO</div><BusinessCard contact={contact} theme={theme} vcard={vcard} /><div className="preview-contact-links"><a href={`mailto:${contact.email}`}><Envelope size={19} /><span>{contact.email}</span><ArrowSquareOut size={16} /></a><a href={`tel:${contact.phone.replace(/[^+\d]/g, '')}`}><Phone size={19} /><span>{contact.phone}</span><ArrowSquareOut size={16} /></a>{contact.website && <a href={websiteUrl(contact.website)} target="_blank" rel="noreferrer"><Globe size={19} /><span>{contact.website}</span><ArrowSquareOut size={16} /></a>}</div><button className="button primary full-width" onClick={download}><ArrowDownTray size={19} />Salva in rubrica</button></>}
       {modal === 'nearby' && <><div className="nearby-illustration" aria-hidden="true"><DeviceMobile size={62} weight="thin" /><ShareNetwork size={25} weight="light" /><DeviceMobile size={62} weight="thin" /></div><h2>Da telefono a telefono.</h2><p className="modal-description">Invia il contatto completo dal menu del tuo telefono, oppure fai inquadrare il QR.</p><div className="nearby-explanation"><strong>Il semplice avvicinamento non funziona da questa pagina.</strong><p>Il browser non può scambiare contatti via NFC tra due telefoni. Su iPhone, NameDrop è una funzione del sistema: non legge i dati di questo biglietto.</p><p>Per condividere anche azienda, email e telefono, invia il file contatto o usa il QR.</p></div><button className="button primary full-width" onClick={share}><ShareNetwork size={19} />Invia il contatto completo</button><button className="nearby-qr-button" onClick={() => { if (validate()) setModal('qr'); }}><QrCode size={19} />Mostra QR Code</button><p className="small-print">Se disponibile, puoi scegliere AirDrop o Quick Share nel menu di condivisione del dispositivo. Altrimenti puoi inviare il file .vcf via messaggio. <a href="https://developer.chrome.com/docs/capabilities/nfc" target="_blank" rel="noreferrer">Compatibilità NFC</a> · <a href="https://support.apple.com/guide/iphone/iph1b6c664b7/ios" target="_blank" rel="noreferrer">NameDrop</a></p></>}

@@ -2,9 +2,10 @@ import React from 'react';
 import { ArrowDown, DownloadSimple as ArrowDownTray, ArrowUpRight, DeviceMobile, Envelope, Globe, PencilSimple, Phone, ShareNetwork, SquaresFour } from '@phosphor-icons/react';
 import { websiteUrl } from './contact.js';
 import CompanyLogo from './CompanyLogo.jsx';
+import { WalletButtons } from './Wallet.jsx';
 import './presentation.css';
 
-export default function ContactPresentation({ contact, theme, qr, onSave, onShare, onNearby, onQR }) {
+export default function ContactPresentation({ contact, theme, qr, onSave, onShare, onNearby, onQR, onWallet }) {
   const fullName = `${contact.firstName} ${contact.lastName}`.trim();
   let website = '';
   try { website = websiteUrl(contact.website); } catch { /* Invalid drafts remain editable. */ }
@@ -32,6 +33,7 @@ export default function ContactPresentation({ contact, theme, qr, onSave, onShar
               <span className="signature-qr-label">IL PIACERE DI RESTARE IN CONTATTO<ArrowDown size={13} /></span>
               <button className="signature-qr-frame" onClick={onQR} aria-label="Mostra QR Code" title="Ingrandisci QR Code">{qr}<span className="signature-qr-corner" aria-hidden="true"><ArrowUpRight size={16} /></span></button>
               <p className="signature-qr-caption">Inquadra. Salva.<span>Ci sentiamo presto.</span></p>
+              <div className="signature-wallet"><WalletButtons onSelect={onWallet} /><small>Importazione guidata nel Wallet</small></div>
             </div>
           </div>
         </div>
